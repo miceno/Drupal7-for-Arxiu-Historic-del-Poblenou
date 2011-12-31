@@ -1,0 +1,30 @@
+; $Id: 
+
+name = Shallow Grunge
+description = <a href="http://drupal.org/project/shallowgrunge">Shallow Grunge</a> was created by <a href="http://www.doncoryon.com">DonCoryon</a> and is based on a theme originally designed by <a href="http://www.freecsstemplates.org/">Free CSS Templates</a>. Shallow Grunge provides unlimited color options and leverages the power of the <a href="http://drupal.org/project/colorpicker">color picker module</a>. It provides four different grunge styles for you to chose from. To top everything off Shallow Grunge comes with an awesome custom font designed by <a href="http://vicfieger.com">Vic Fieger</a>.
+version = VERSION
+core = 7.x
+
+stylesheets[all][]      = font.css
+stylesheets[all][]      = style.css
+
+regions[help]           = Help
+regions[header]         = Header
+regions[search]         = Search
+regions[content]        = Content
+regions[sidebar_first]  = Sidebar first
+regions[footer]         = Footer
+
+
+settings[headcolor]     = #333333
+settings[navcolor]      = #7f0000
+settings[headingscolor] = #000000
+settings[linkcolor]     = #A42424
+settings[grunge]        = grunge1
+
+; Information added by drupal.org packaging script on 2011-01-16
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "shallowgrunge"
+datestamp = "1295180587"
+

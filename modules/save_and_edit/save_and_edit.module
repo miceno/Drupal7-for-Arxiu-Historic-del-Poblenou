@@ -1,0 +1,140 @@
+<?php
+error_reporting(NULL);
+// $Id: save_and_edit.module,v 1.1.2.4 2009/06/23 16:23:54 himerus Exp $
+/**
+ * Save & Edit (http://drupal.org/project/save_and_edit)
+ * Provides a button that gives users the option to 
+ * Save a form they are working on, AND return to the
+ * editing form in one step.
+ * 
+ * I find this quite usefull when entering a very long
+ * blog post, and my thumb hovering dangerously close to
+ * the mouse button that will take me "back" and lose all
+ * my entered changes/data.
+ * 
+ * No Kittens were harmed during the creation of this module.
+ */
+
+/**
+ * Provide online user help.
+ *
+ * @param $path
+ * @param $arg
+ * @return
+ *   Help text
+ */
+function save_and_edit_help($path, $arg) {
+  switch ($path) {
+    case 'admin/settings/save-edit':
+     return '<p>'. t('Save & Edit adds a "Save and edit" button to the node add and node configure forms. The module also provides options to modify the way the "Publish" feature works when using Save & Edit. If the modifications are enabled to the Publish feature, when a node is unpublished, it will also create a "Publish" button that will obviously Save & Publish a node that was previously marked as Unpublished.') .'</p>';
+    case 'admin/help#save_and_edit':
+      return '<p>'. t('Save & Edit adds a "Save and edit" button to the node add and node configure forms. The module also provides options to modify the way the "Publish" feature works when using Save & Edit. If the modifications are enabled to the Publish feature, when a node is unpublished, it will also create a "Publish" button that will obviously Save & Publish a node that was previously marked as Unpublished.') .'</p>';
+     
+  }
+}
+/**
+ * Implementation of hook_perm().
+ */
+
+function save_and_edit_menu() {
+ 
+ 
+  $items['admin/content/save-edit'] = array(
+	  'title' => t('Save & Edit Settings'),
+	  'page callback' => 'drupal_get_form',
+	  'page arguments' => array('save_and_edit_admin_settings_form'),
+	  'description' => t('Administer settings related to the Save & Edit module'),
+	  'access arguments' => array('administer save and edit'),
+	  'type' => MENU_NORMAL_ITEM,
+	  'file' => 'save_and_edit.admin.inc'
+	);
+  return $items;
+}
+function save_and_edit_form_alter(&$form, &$form_state, $form_id)
+{
+	
+	
+	
+	$node_types = variable_get('save_edit_node_types', array());
+	
+	//&& $node_types[$form_type] && user_access('use save and edit')
+	$form_type = $form['type']['#value'];
+	if($form['#node_edit_form']==1 && $node_types[$form_type] && user_access('use save and edit'))
+	{
+	//add save and edit btn
+   $form['actions']['save_edit'] = array(
+      '#type' => 'submit',
+      '#access' => user_access('use save and edit'),
+      '#value' => t(variable_get('save_edit_button_value', 'Save & Edit')),
+      '#weight' => variable_get('save_edit_button_weight', 4),
+      '#submit' => array('redirect_save_edit_submit'),
+    );
+    // now if we have chosen to use the auto-unpublish feature, we should
+    // create a Publish button to add a clear workflow
+    if((variable_get('save_edit_unpublish', 0) || variable_get('save_edit_unpublish_new_only', 0)) && !$form['#node']->status) {
+	    $form['buttons']['save_edit_publish'] = array(
+	      '#type' => 'submit',
+	      '#access' => user_access('use save and edit'),
+	      '#value' => t(variable_get('save_edit_publish_button_value', 'Save & Publish')),
+	      '#weight' => variable_get('save_edit_publish_button_weight', 7),
+	      '#submit' => array('redirect_save_edit_submit'),
+	    );
+    }
+    
+    // this allows us to modify the default Save button to something we like more
+    $form['actions']['submit'] = array(
+	    '#type' => 'submit',
+	    '#access' => !variable_get('node_preview', 0) || (!form_get_errors() && isset($form_state['node_preview'])),
+	    '#value' => t(variable_get('save_edit_default_save_button_value', 'Save')),
+	    '#weight' => variable_get('save_edit_default_save_button_weight', 5),
+	    '#submit' => array('node_form_submit'),
+	  );
+    // declare default handler & then the custom one
+    // for some reason without the default drupal node handler, it is 
+    // completely ignoring the default/external submit handlers.
+    // @todo read up on D6 submit handlers and how to simply append this 
+    // handler to any handler(s) being called to the normal submit function
+    $form['buttons']['save_edit']['#submit'] = array('redirect_save_edit_submit');		
+	}
+		
+}
+function redirect_save_edit_submit($form, &$form_state) {
+	// we will first check to see if they want to auto-unpublish, and make modifications if so
+	// before submitting the node
+	// ONLY do something on new nodes
+	if(variable_get('save_edit_unpublish_new_only', 0) && !$form_state['values']['nid']) {
+		$form_state['values']['status'] = 0;
+	}
+	// DO IT EVERY TIME Save & Edit is used. (Seems like a rare case)
+	elseif(variable_get('save_edit_unpublish', 0) && !variable_get('save_edit_unpublish_new_only', 0)) {
+		$form_state['values']['status'] = 0;
+	}
+	// WAIT... if someone clicked the Publish button, maybe we should retick that option now
+	if($form_state['clicked_button']['#id'] == 'edit-save-edit-publish') {
+		$form_state['values']['status'] = 1;
+	}
+	// call default node save/submit function
+	node_form_submit($form, $form_state);
+	// only redirect if using the Save & Edit button
+  if ($form_state['clicked_button']['#id'] == 'edit-save-edit') {
+  	// change redirect location
+  	if ($_REQUEST['destination']) {
+  		$form_state['redirect'] = url('node/'. $form_state['nid']. '/edit', 
+  		  array(
+  		    'query' => array(
+  		      'destination' => $_REQUEST['destination'], 
+  		    ),
+  		    'absolute' => TRUE,  		    
+  		  )
+  		); 
+  		unset($_REQUEST['destination']);
+  	}
+  	else {
+  		// just go back to the form edit page, and dont worry about the redirect
+  		$form_state['redirect'] = 'node/'. $form_state['nid']. '/edit'; 
+  	}
+  }
+}
+/*
+ * Admin Settings form for Save & Edit
+ */

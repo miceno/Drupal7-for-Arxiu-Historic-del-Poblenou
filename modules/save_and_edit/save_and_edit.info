@@ -1,0 +1,13 @@
+name = Save & Edit 
+description = Save & Edit module for button on node pages. No Kittens were harmed during the creation of this module. over drupal7 by procabstudio 
+core = 7.x
+package = Administration
+
+;Other Modules
+
+
+core = "7.x"
+project = "save_and_edit"
+version = "7.x"
+datestamp = "1297199536"
+
