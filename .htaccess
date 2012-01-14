@@ -100,6 +100,12 @@ DirectoryIndex index.php index.html index.htm
   # uncomment the following line:
   RewriteBase /
 
+  # i18n rewrite files 
+  # Pass all requests with a language referral to the absolute path
+  # at files directory
+  # Uncomment if you enable i18n and your files are not showing properly
+  RewriteRule ^(..)/(sites/default/files/.*) $2 [L] 
+
   # Pass all requests not referring directly to files in the filesystem to
   # index.php. Clean URLs are handled in drupal_environment_initialize().
   RewriteCond %{REQUEST_FILENAME} !-f
