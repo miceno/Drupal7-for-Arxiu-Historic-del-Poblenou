@@ -811,6 +811,10 @@ div.admin-panel h3 a:visited{
 #logo{ background-color: white; }
 #money-bg{ background-color: white; background-image: none; }
 p { padding-bottom: 6px; }
-.content p {
-    line-height: 140%;
-}
+.content p { line-height: 140%; }
+/* Visual hierarchy */
+h1, h1.title {font-family: Verdana; font-weigth: bold; }
+/* Primary Menu visual hierarchy */
+.rws-primary-menu{ font-family: Verdana, sans-serif; }
+/* Visual hierarchy */
+#block-system-main h2{ font-size:1.3em; font-family: Verdana, Tahoma,  sans-serif; margin: 0 0 0.5em 0; }
