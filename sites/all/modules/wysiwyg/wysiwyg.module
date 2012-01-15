@@ -945,7 +945,7 @@ function wysiwyg_get_path($library, $base_path = FALSE) {
   }
   if (!isset($libraries[$library])) {
     // Most often, external libraries can be shared across multiple sites.
-    return 'sites/all/libraries/' . $library;
+    return 'sites/all/modules/libraries/' . $library;
   }
 
   $path = ($base_path ? base_path() : '');
@@ -982,7 +982,7 @@ function wysiwyg_get_libraries() {
     $profile = variable_get('install_profile', 'default');
   }
 
-  $directory = 'libraries';
+  $directory = 'modules/libraries';
   $searchdir = array();
   $config = conf_path();
 
