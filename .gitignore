@@ -9,7 +9,7 @@ sites/*/private
 *.php
 includes
 misc
-modules
+./modules
 profiles
 resources
 scripts
