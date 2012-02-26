@@ -32,8 +32,15 @@
  * Copyright Khalid Baheyeldin 2008 of http://2bits.com
  */
 
-define('PERFORMANCE_KEY',          'dru-perf:'. $_SERVER['HTTP_HOST'] .':');
-define('PERFORMANCE_MEMCACHE_BIN', 'cache_performance');
+/**
+ * Zend Datacache reference: http://files.zend.com/help/Zend-Server-IBMi/zend_data_cache_-_php_api.htm
+ */
+
+define('PERFORMANCE_KEY',            'dru-perf:'. $_SERVER['HTTP_HOST'] .':');
+define('PERFORMANCE_MEMCACHE_BIN',   'cache_performance');
+
+define('PERFORMANCE_ZEND_NAMESPACE', 'dru-perf-'. $_SERVER['HTTP_HOST']);
+define('PERFORMANCE_ZEND_KEYS',      PERFORMANCE_ZEND_NAMESPACE . '::all-of-the-keys');
 
 /**
  * Implementation of hook_menu().
@@ -75,9 +82,19 @@ function performance_menu() {
     'description'      => 'Clears performance statistics collected in Memcache.',
     'page callback'    => 'drupal_get_form',
     'page arguments'   => array('performance_clear_memcache_confirm'),
-    'access arguments' => array('access administration pages'),
+    'access arguments' => array('administer performance logging'),
     'type'             => MENU_LOCAL_TASK,
-    'weight'           => 1,
+    'weight'           => 2,
+  );
+
+  $items['admin/config/development/performance-logging/zend-clear'] = array(
+    'title'            => 'Clear Zend Datacache',
+    'description'      => 'Clears performance statistics collected in Zend Datacache.',
+    'page callback'    => 'drupal_get_form',
+    'page arguments'   => array('performance_clear_zend_confirm'),
+    'access arguments' => array('administer performance logging'),
+    'type'             => MENU_LOCAL_TASK,
+    'weight'           => 3,
   );
 
   $items['admin/reports/performance-logging'] = array(
@@ -131,6 +148,7 @@ function performance_cron() {
   performance_db_prune($timestamp);
   performance_apc_prune($timestamp);
   performance_memcache_prune($timestamp);
+  performance_zend_prune($timestamp);
 }
 
 /**
@@ -143,31 +161,32 @@ function performance_settings_form() {
   );
 
   // Display message on settings form.
-  if (function_exists('apc_cache_info') && performance_memcache_enabled()) {
-    // Both enabled.
-    $cache = 'APC + Memcache';
-    $type = 'status';
-  }
-  else if (function_exists('apc_cache_info')) {
+  $caches = array();
+  $type = 'error';
+  
+  if (performance_apc_enabled()) {
     // APC enabled.
-    $cache = 'APC';
+    $caches[] = 'APC';
     $type = 'status';
   }
-  else if (performance_memcache_enabled()) {
+  
+  if (performance_memcache_enabled()) {
     // Memcache enabled.
-    $cache = 'Memcache';
-    $type = 'status';
+    $caches[] = 'Memcache';
+	$type = 'status';
   }
-  else {
-    // Error message
-    $type = 'error';
+  
+  if (performance_zend_enabled()) {
+    // Zend Datacache enabled.
+    $caches[] = 'Zend Datacache';
+    $type = 'status';
   }
 
-  if ($type == 'status') {
-    $message = t('!cache enabled. It is reasonably safe to enable summary logging on live sites.', array('!cache' => $cache));
+  if (count($caches) > 0) {
+    $message = t('!cache enabled. It is reasonably safe to enable summary logging on live sites.', array('!cache' => join("+", $caches)));
   }
   else {
-    $message = t('APC nor Memcache are enabled. It is <strong>not</strong> safe to enable summary logging to the database on live sites!');
+    $message = t('APC, Memcache, nor Zend Datacache are enabled. It is <strong>not</strong> safe to enable summary logging to the database on live sites!');
   }
   drupal_set_message($message, $type, FALSE);
 
@@ -195,7 +214,7 @@ function performance_settings_form() {
   );
 
   $disabled = TRUE;
-  if (function_exists('apc_cache_info')) {
+  if (performance_apc_enabled()) {
     $disabled = FALSE;
   }
 
@@ -220,6 +239,20 @@ function performance_settings_form() {
     '#options'       => $options,
     '#disabled'      => $disabled,
     '#description'   => t('Log summary data, such as average and maximum page generation times and memory usage to Memcached, if installed. The summary will be stored in Memcached memory, and hence there is no load on the database. This logging to Memcached is suitable for most live sites, unless the number of unique page accesses is excessively high.'),
+  );
+  
+  $disabled = TRUE;
+  if (performance_zend_enabled()) {
+    $disabled = FALSE;
+  }
+
+  $form['mode']['performance_summary_zend'] = array(
+    '#type'          => 'select',
+    '#title'         => t('Summary logging (Zend Datacache)'),
+    '#default_value' => variable_get('performance_summary_zend', 0),
+    '#options'       => $options,
+    '#disabled'      => $disabled,
+    '#description'   => t('Log summary data, such as average and maximum page generation times and memory usage to Zend Datacache, if installed. The summary will be stored in Zend Datacache memory, and hence there is no load on the database. This logging to Zend Datacache is suitable for most live sites, unless the number of unique page accesses is excessively high.'),
   );
 
   $form['other'] = array(
@@ -329,12 +362,16 @@ function performance_shutdown() {
     performance_log_summary_db($params);
   }
 
-  if (variable_get('performance_summary_apc', 0) && function_exists('apc_cache_info')) {
+  if (variable_get('performance_summary_apc', 0) && performance_apc_enabled()) {
     performance_log_summary_apc($params);
   }
 
   if (variable_get('performance_summary_memcache', 0) && performance_memcache_enabled()) {
     performance_log_summary_memcache($params);
+  }
+  
+  if (variable_get('performance_summary_zend', 0) && performance_zend_enabled()) {
+    performance_log_summary_zend($params);
   }
 }
 
@@ -345,7 +382,7 @@ function performance_shutdown() {
  * @param params array of current data
  * @return array holding summary data
  */
-function performance_build_summary_data($data, $params) {
+function performance_build_summary_data($data, $params, $engine = '') {
   if (is_object($data)) {
     // Handle Memcache object.
     if (isset($data->data)) {
@@ -372,6 +409,13 @@ function performance_build_summary_data($data, $params) {
       'num_accesses'    => $data['num_accesses'] + 1,
       'path'            => $data['path'],
     );
+
+    // TODO: this is a quick fix. These lines broke DB summary logging!
+    // See if zend really needs this!
+    if ($engine == 'zend') {
+      $data['created'] = $data['created'];
+      $data['updated'] = REQUEST_TIME;
+    }
   }
   else {
     $type = 'new';
@@ -388,6 +432,13 @@ function performance_build_summary_data($data, $params) {
       'num_accesses'    => 1,
       'path'            => $params['path'],
     );
+
+    // TODO: this is a quick fix. These lines broke DB summary logging!
+    // See if zend really needs this!
+    if ($engine == 'zend') {
+      $data['created'] = REQUEST_TIME;
+      $data['updated'] = REQUEST_TIME;
+    }
   }
 
   return array('data' => $data, 'type' => $type);
@@ -428,6 +479,18 @@ function performance_apc_list_all($timestamp = 0) {
 }
 
 /**
+ * Helper function to check if APC is available.
+ */
+function performance_apc_enabled() {
+  global $conf;
+
+  if (function_exists('apc_cache_info') && !function_exists('zend_shm_cache_store')) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/**
  * Helper function to get data from APC.
  *
  * @param $timestamp unix timestamp to start fetching data from
@@ -448,7 +511,7 @@ function performance_apc_get_data($timestamp = 0) {
  * Helper function to cleanup APC data.
  */
 function performance_apc_prune($timestamp = 0) {
-  if (!function_exists('apc_cache_info')) {
+  if (!variable_get('performance_summary_apc', 0) && !performance_apc_enabled()) {
     // APC not enabled, nothing to do...
     return;
   }
@@ -542,6 +605,77 @@ function performance_memcache_prune($timestamp = 0) {
     }
   }
 }
+
+// --- Zend Datacache ---
+
+/**
+ * Helper function to check if Memcache is available.
+ */
+function performance_zend_enabled() {
+  global $conf;
+
+  return function_exists('zend_shm_cache_store');
+}
+
+/**
+ * Helper function to store summary data in Zend Datacache.
+ */
+function performance_log_summary_zend($params = array()) {
+  $key = PERFORMANCE_ZEND_NAMESPACE . '::' . $params['path'];
+  $result = performance_build_summary_data(zend_shm_cache_fetch($key), $params, 'zend');
+
+  if ($result['type'] == 'new') {
+  $keys_values = zend_shm_cache_fetch(PERFORMANCE_ZEND_KEYS);
+  if ($keys_values === FALSE) $keys_values = array();
+
+  $keys_values[$key] = 1;
+    zend_shm_cache_store(PERFORMANCE_ZEND_KEYS, $keys_values, CACHE_PERMANENT);
+  }
+
+  zend_shm_cache_store($key, $result['data'], CACHE_PERMANENT);
+}
+
+/**
+ * Helper function to get data from Zend Datacache.
+ *
+ * @param $timestamp unix timestamp to start fetching data from
+ * @return array of fetched data
+ */
+function performance_zend_get_data($timestamp = 0) {
+  $data_list = array();
+
+  if ($keys_values = zend_shm_cache_fetch(PERFORMANCE_ZEND_KEYS)) {
+    if ($keys_values !== FALSE) {
+      foreach ($keys_values as $key => $v) {
+        $cache = zend_shm_cache_fetch($key);
+        if ($cache !== FALSE && $cache['created'] >= $timestamp) {
+          $data_list[] = $cache;
+        }
+      }
+    }
+  }
+
+  return $data_list;
+}
+
+/**
+ * Helper function to cleanup Zend Datacache data.
+ */
+function performance_zend_prune($timestamp = 0) {
+  if (variable_get('performance_summary_zend', 0) && performance_zend_enabled()) {
+    if ($keys_values = zend_shm_cache_fetch(PERFORMANCE_ZEND_KEYS)) {
+      if ($keys_values !== FALSE) {
+        foreach ($keys_cache as $key => $v) {
+          $cache = zend_shm_cache_fetch($key);
+          if ($cache['created'] <= $timestamp) {
+            zend_shm_cache_delete($key);
+          }
+        }
+      }
+    }
+  }
+}
+
 
 // --- Database ---
 
@@ -677,6 +811,7 @@ function performance_view_summary() {
   $sum[] = variable_get('performance_summary_db', 0);
   $sum[] = variable_get('performance_summary_apc', 0);
   $sum[] = variable_get('performance_summary_memcache', 0);
+  $sum[] = variable_get('performance_summary_zend', 0);
   $go = array_sum($sum);
 
   if (!$go) {
@@ -718,8 +853,11 @@ function performance_view_summary() {
   else if (variable_get('performance_summary_memcache', 0) && performance_memcache_enabled()) {
     $source = 'memcache';
   }
-  else if (variable_get('performance_summary_apc', 0) && function_exists('apc_cache_info')) {
+  else if (variable_get('performance_summary_apc', 0) && performance_apc_enabled()) {
     $source = 'APC';
+  }
+  else if (variable_get('performance_summary_zend', 0) && performance_zend_enabled()) {
+    $source = 'Zend';
   }
   else {
     $source = 'database';
@@ -732,6 +870,9 @@ function performance_view_summary() {
       break;
     case 'APC':
       $data_list = performance_apc_get_data();
+      break;
+    case 'Zend':
+      $data_list = performance_zend_get_data();
       break;
     default:
       $data_list = performance_db_get_data($header, $pager_height);
@@ -847,8 +988,11 @@ function performance_sources_switcher($source) {
   if (variable_get('performance_summary_memcache', 0) && performance_memcache_enabled()) {
     $sources['memcache'] = 'Memcache';
   }
-  if (variable_get('performance_summary_apc', 0) && function_exists('apc_cache_info')) {
+  if (variable_get('performance_summary_apc', 0) && performance_apc_enabled()) {
     $sources['APC'] = 'APC';
+  }
+  if (variable_get('performance_summary_zend', 0) && performance_zend_enabled()) {
+    $sources['Zend'] = 'Zend Datacache';
   }
   $current = $sources[$source];
   unset($sources[$source]);
@@ -956,7 +1100,7 @@ function performance_clear_apc_confirm() {
  * Clear APC confirm form submit handler.
  */
 function performance_clear_apc_confirm_submit($form_id, &$form) {
-  if (!function_exists('apc_cache_info')) {
+  if (!performance_apc_enabled()) {
     drupal_set_message(t('APC is not enabled. Nothing to do...'), 'status', FALSE);
     drupal_goto('admin/config/development/performance-logging');
     return;
@@ -1021,6 +1165,38 @@ function performance_clear_memcache_confirm_submit($form, &$form_state) {
 }
 
 /**
+ * Clear Zend Datacache confirm form callback.
+ */
+function performance_clear_zend_confirm() {
+  $form['confirm'] = array(
+    '#value' => t('Confirm Zend Datacache clear'),
+  );
+  return confirm_form(
+    $form,
+    t('Are you sure you want to clear the Zend Datacache statistics for this site?'),
+    'admin/config/development/performance-logging',
+    t('This will clear all the collected performance statistics stored in Zend Datacache. This action cannot be undone.'),
+    t('Clear'),
+    t('Cancel'));
+}
+
+/**
+ * Clear Zend Datacache confirm form submit handler.
+ */
+function performance_clear_zend_confirm_submit($form, &$form_state) {
+  if (!performance_zend_enabled()) {
+    drupal_set_message(t('Zend Datacache is not enabled. Nothing to do...'), 'status', FALSE);
+    drupal_goto('admin/config/development/performance-logging');
+    return;
+  }
+
+  zend_shm_cache_clear(PERFORMANCE_ZEND_NAMESPACE);
+
+  drupal_set_message(t('Performance statistics collected in Zend Datacache have been cleared.'), 'status', FALSE);
+  drupal_goto('admin/config/development/performance-logging');
+}
+
+/**
  * Gather performance data for external modules
  */
 function performance_gather_summary_data() {
@@ -1030,6 +1206,7 @@ function performance_gather_summary_data() {
   $sum[] = variable_get('performance_summary_db', 0);
   $sum[] = variable_get('performance_summary_apc', 0);
   $sum[] = variable_get('performance_summary_memcache', 0);
+  $sum[] = variable_get('performance_summary_zend', 0);
   $go = array_sum($sum);
 
   if (!$go) {
@@ -1044,8 +1221,11 @@ function performance_gather_summary_data() {
   if (variable_get('performance_summary_memcache', 0) && performance_memcache_enabled()) {
     $data_list = performance_memcache_get_data($timestamp);
   }
-  else if (variable_get('performance_summary_apc', 0) && function_exists('apc_cache_info')) {
+  else if (variable_get('performance_summary_apc', 0) && performance_apc_enabled()) {
     $data_list = performance_apc_get_data($timestamp);
+  }
+  else if (variable_get('performance_summary_zend', 0) && performance_zend_enabled()) {
+    $data_list = performance_zend_get_data($timestamp);
   }
   else {
     $data_list = performance_db_get_data(NULL, NULL, $timestamp);
