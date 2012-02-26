@@ -4,9 +4,9 @@ description = Provides a dropdown select to switch between available languages.
 dependencies[] = locale
 core = 7.x
 
-; Information added by drupal.org packaging script on 2011-10-06
-version = "7.x-1.0"
+; Information added by drupal.org packaging script on 2012-02-18
+version = "7.x-1.2"
 core = "7.x"
 project = "lang_dropdown"
-datestamp = "1317906409"
+datestamp = "1329527439"
 

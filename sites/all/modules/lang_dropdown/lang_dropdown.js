@@ -15,7 +15,8 @@ Drupal.behaviors.lang_dropdown = {
       $('select.lang-dropdown-select-element').msDropDown({
         visibleRows: msddSettings.visibleRows,
         rowHeight: msddSettings.rowHeight,
-        animStyle: msddSettings.animStyle
+        animStyle: msddSettings.animStyle,
+        mainCSS: msddSettings.mainCSS
       });
     }
 
@@ -24,6 +25,8 @@ Drupal.behaviors.lang_dropdown = {
       var href = $(this).parents('form').find('input[name="' + lang + '"]').val();
       document.location.href = href;
     });
+
+    $('form#lang-dropdown-form').after('<div style="clear:both;"></div>');
   }
 };
 })(jQuery);
