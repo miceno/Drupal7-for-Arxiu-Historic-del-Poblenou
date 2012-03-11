@@ -945,7 +945,15 @@ function wysiwyg_get_path($library, $base_path = FALSE) {
   }
   if (!isset($libraries[$library])) {
     // Most often, external libraries can be shared across multiple sites.
-    return 'sites/all/modules/libraries/' . $library;
+    $DEFAULT_PATH='sites/all/libraries/';
+    if (!is_dir($DEFAULT_PATH)){
+       $ALTERNATE_PATH='sites/all/modules/libraries/';
+       $result = $ALTERNATE_PATH . $library;
+    }
+    else{
+       $result = $DEFAULT_PATH . $library;
+    }
+    return $result;
   }
 
   $path = ($base_path ? base_path() : '');
@@ -982,7 +990,7 @@ function wysiwyg_get_libraries() {
     $profile = variable_get('install_profile', 'default');
   }
 
-  $directory = 'modules/libraries';
+  $directory = 'libraries';
   $searchdir = array();
   $config = conf_path();
 
@@ -996,6 +1004,9 @@ function wysiwyg_get_libraries() {
 
   // Always search sites/all/*.
   $searchdir[] = 'sites/all/' . $directory;
+
+  // Also search sites/all/modules/*.
+  $searchdir[] = 'sites/all/modules/' . $directory;
 
   // Also search sites/<domain>/*.
   if (file_exists("$config/$directory")) {
