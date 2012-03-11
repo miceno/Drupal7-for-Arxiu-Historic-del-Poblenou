@@ -4,26 +4,28 @@ sites/*/settings*.php
 # Ignore paths that contain user-generated content.
 sites/*/files
 sites/*/private
+#!sites/all/modules/*
 
 # Ignore paths from the core
-*.php
-includes
-misc
-./modules
-profiles
-resources
-scripts
-themes
+/*.php
+/cache
+/includes
+/misc
+/modules
+/profiles
+/resources
+/scripts
+/themes
 
-CHANGELOG.txt
-COPYRIGHT.txt
-INSTALL.mysql.txt
-INSTALL.pgsql.txt
-INSTALL.sqlite.txt
-INSTALL.txt
-LICENSE.txt
-MAINTAINERS.txt
-README.txt
-UPGRADE.txt
-web.config
+/CHANGELOG.txt
+/COPYRIGHT.txt
+/INSTALL.mysql.txt
+/INSTALL.pgsql.txt
+/INSTALL.sqlite.txt
+/INSTALL.txt
+/LICENSE.txt
+/MAINTAINERS.txt
+/README.txt
+/UPGRADE.txt
+/web.config
 
